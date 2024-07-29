@@ -21,7 +21,11 @@ public class ActiveDirectoryDAO
 	private static final Logger log = Logger.getLogger(ActiveDirectoryDAO.class);
 
 	private static final String USER_FILTER = "(&(objectClass=User)(!(userAccountControl=66050)))";
+
 	private static final String GROUP_FILTER = "(objectClass=Group)";
+
+	private static final Set<String> LDAP_TIMESTAMP_ATTRIBUTES =
+			Set.of("pwdlastset", "accountexpires", "lastlogon", "lastlogontimestamp", "badpasswordtime");
 
 	@ConfigProperty(name = "ldap.basedn.group")
 	private String groupBaseDn;
@@ -39,6 +43,24 @@ public class ActiveDirectoryDAO
 		try
 		{
 			result = getLdapObjects(baseDn, GROUP_FILTER, attrs);
+		}
+		catch (Exception e)
+		{
+			log.error(e.getMessage());
+			log.infov("error: {0}", e.getMessage(), e);
+			result = Collections.emptyMap();
+		}
+
+		return result;
+	}
+
+	public Map<String, Map<String, String>> getUsers(String baseDn, Set<String> attrs)
+	{
+		Map<String, Map<String, String>> result;
+
+		try
+		{
+			result = getLdapObjects(baseDn, USER_FILTER, attrs);
 		}
 		catch (Exception e)
 		{
@@ -88,8 +110,13 @@ public class ActiveDirectoryDAO
 					                                                  .asIterator(); it.hasNext(); )
 					{
 						Attribute attr = it.next();
-						attrResult.put(attr.getID(), attr.get()
-						                                 .toString());
+						String key = attr.getID();
+						String val = attr.get()
+						                 .toString();
+						if (LDAP_TIMESTAMP_ATTRIBUTES.contains(key.toLowerCase()))
+							val = getDateFromTimestamp(val).toString();
+
+						attrResult.put(key, val);
 					}
 				}
 
@@ -174,65 +201,6 @@ public class ActiveDirectoryDAO
 		log.debugv("obtaining common names complete: {0}", commonNames.size());
 
 		return commonNames;
-	}
-
-	public Set<String> getGroups() throws Exception
-	{
-		Set<String> groups = new HashSet<>();
-		log.debug("obtaining groups");
-
-		try
-		{
-			SearchControls ctls = new SearchControls();
-			ctls.setSearchScope(SearchControls.SUBTREE_SCOPE);
-			ctls.setReturningAttributes(
-					new String[] { "distinguishedName", "cn", "member", "whenChanged", "whenCreated" });
-			ctls.setReturningObjFlag(false);
-			ctls.setCountLimit(0);
-
-			int pageSize = 1000;
-			byte[] cookie = null;
-			ctx.setRequestControls(new Control[] { new PagedResultsControl(pageSize, Control.NONCRITICAL) });
-
-			do
-			{
-				NamingEnumeration<SearchResult> resultList = ctx.search(groupBaseDn, "(objectClass=Group)", ctls);
-				while (resultList != null && resultList.hasMoreElements())
-				{
-					SearchResult searchResult = resultList.nextElement();
-					groups.add(searchResult.getNameInNamespace());
-					Attributes attributes = searchResult.getAttributes();
-					if (attributes == null || attributes.get("cn") == null)
-					{
-						log.warnv("no attributes found for: {0}", searchResult.getName());
-						continue;
-					}
-
-					groups.add(searchResult.getNameInNamespace());
-				}
-
-				// Examine the paged results control response
-				Control[] controls = ctx.getResponseControls();
-				if (controls != null)
-					for (Control control : controls)
-						if (control instanceof PagedResultsResponseControl prrc)
-							cookie = prrc.getCookie();
-
-				ctx.setRequestControls(new Control[] { new PagedResultsControl(pageSize, cookie, Control.CRITICAL) });
-			}
-			while (cookie != null);
-		}
-		catch (Exception ne)
-		{
-			log.errorv("unable to obtain dns: {0}", ne.getMessage());
-			log.info("unable to connect to directory", ne);
-
-			throw ne;
-		}
-
-		log.debugv("obtaining groups complete: {0}", groups.size());
-
-		return groups;
 	}
 
 	public Set<String> getGroupMembers(String groupName)
@@ -663,5 +631,11 @@ public class ActiveDirectoryDAO
 		}
 
 		return null;
+	}
+
+	public Date getDateFromTimestamp(String timestamp)
+	{
+		long time = (Long.parseLong(timestamp) / 10000L) - +11644473600000L;
+		return new Date(time);
 	}
 }

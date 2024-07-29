@@ -2,7 +2,7 @@ package cops.sync.ad.dao;
 
 import cops.sync.ad.util.BlindSSLSocketFactory;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.context.Dependent;
+import jakarta.enterprise.inject.Default;
 import jakarta.ws.rs.Produces;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
@@ -13,7 +13,7 @@ import javax.naming.ldap.InitialLdapContext;
 import javax.naming.ldap.LdapContext;
 import java.util.Hashtable;
 
-@Dependent
+@ApplicationScoped
 public class Modules
 {
 	private static final Logger log = Logger.getLogger(Modules.class);
@@ -29,8 +29,8 @@ public class Modules
 	@ConfigProperty(name = "ldap.securityCredentials")
 	String pwd;
 
+	@Default
 	@Produces
-	@ApplicationScoped
 	LdapContext provideLdapContext()
 	{
 		if (ldapContext != null)

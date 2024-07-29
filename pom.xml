@@ -44,22 +44,22 @@
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-agroal</artifactId>
     </dependency>
-<!--    <dependency>-->
-<!--      <groupId>io.quarkus</groupId>-->
-<!--      <artifactId>quarkus-config-yaml</artifactId>-->
-<!--    </dependency>-->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-config-yaml</artifactId>
+    </dependency>
     <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-jackson</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.quarkus</groupId>
-      <artifactId>quarkus-jdbc-mariadb</artifactId>
-    </dependency>
-    <dependency>
       <groupId>net.snowflake</groupId>
       <artifactId>snowflake-jdbc</artifactId>
       <version>3.18.0</version>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-jdbc-postgresql</artifactId>
     </dependency>
     <dependency>
       <groupId>io.quarkus</groupId>
