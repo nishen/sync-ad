@@ -1,15 +1,14 @@
 package cops.sync.ad.entity.adinfo;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 
 @Entity
-@Table(name = "active_directory_group")
+@Table(name = "ads_group")
 public class ActiveDirectoryGroup
 {
 	@Id
@@ -30,6 +29,11 @@ public class ActiveDirectoryGroup
 
 	@Column(name = "updated")
 	Date updated;
+
+	@ManyToMany
+	@JoinTable(name = "ads_user_group", joinColumns = @JoinColumn(name = "group_name"),
+	           inverseJoinColumns = @JoinColumn(name = "user_name"))
+	Set<ActiveDirectoryUser> members = new HashSet<>();
 
 	public String getName()
 	{
@@ -91,36 +95,29 @@ public class ActiveDirectoryGroup
 		this.updated = updated;
 	}
 
+	public Set<ActiveDirectoryUser> getMembers()
+	{
+		return members;
+	}
+
+	public void setMembers(Set<ActiveDirectoryUser> members)
+	{
+		this.members = members;
+	}
+
 	@Override
 	public boolean equals(Object o)
 	{
 		if (this == o)
 			return true;
-		if (o == null || getClass() != o.getClass())
+		if (!(o instanceof ActiveDirectoryGroup that))
 			return false;
-
-		ActiveDirectoryGroup that = (ActiveDirectoryGroup) o;
-		return Objects.equals(name, that.name) && Objects.equals(normalisedDn, that.normalisedDn) &&
-		       Objects.equals(dn, that.dn) && Objects.equals(cn, that.cn) && Objects.equals(created, that.created) &&
-		       Objects.equals(updated, that.updated);
+		return Objects.equals(name, that.name);
 	}
 
 	@Override
 	public int hashCode()
 	{
-		int result = Objects.hashCode(name);
-		result = 31 * result + Objects.hashCode(normalisedDn);
-		result = 31 * result + Objects.hashCode(dn);
-		result = 31 * result + Objects.hashCode(cn);
-		result = 31 * result + Objects.hashCode(created);
-		result = 31 * result + Objects.hashCode(updated);
-		return result;
-	}
-
-	@Override
-	public String toString()
-	{
-		return "ActiveDirectoryGroup{" + "name='" + name + '\'' + ", normalisedDn='" + normalisedDn + '\'' + ", dn='" +
-		       dn + '\'' + ", cn='" + cn + '\'' + ", created=" + created + ", updated=" + updated + '}';
+		return Objects.hashCode(name);
 	}
 }

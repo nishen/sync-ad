@@ -110,13 +110,8 @@ public class ActiveDirectoryDAO
 					                                                  .asIterator(); it.hasNext(); )
 					{
 						Attribute attr = it.next();
-						String key = attr.getID();
-						String val = attr.get()
-						                 .toString();
-						if (LDAP_TIMESTAMP_ATTRIBUTES.contains(key.toLowerCase()))
-							val = getDateFromTimestamp(val).toString();
-
-						attrResult.put(key, val);
+						attrResult.put(attr.getID(), attr.get()
+						                                 .toString());
 					}
 				}
 
@@ -144,82 +139,79 @@ public class ActiveDirectoryDAO
 		return result;
 	}
 
-	public Set<String> getUserCommonNames() throws Exception
+	public Set<String> getUserGroups(String userDn)
 	{
-		Set<String> commonNames = new HashSet<>();
-		log.debug("obtaining user CommonNames");
+		Set<String> groups = new HashSet<>();
+
+		log.debugv("obtaining group information: {0}", userDn);
 
 		try
 		{
 			SearchControls ctls = new SearchControls();
-			ctls.setSearchScope(SearchControls.SUBTREE_SCOPE);
-			ctls.setReturningAttributes(new String[] { "cn" });
+			ctls.setSearchScope(SearchControls.OBJECT_SCOPE);
+			ctls.setReturningAttributes(new String[] { "memberOf" });
 			ctls.setReturningObjFlag(false);
 			ctls.setCountLimit(0);
 
-			int pageSize = 1000;
-			byte[] cookie = null;
-			ctx.setRequestControls(new Control[] { new PagedResultsControl(pageSize, Control.NONCRITICAL) });
-
-			do
+			NamingEnumeration<SearchResult> resultList = ctx.search(userDn, USER_FILTER, ctls);
+			if (resultList == null || !resultList.hasMoreElements())
 			{
-				NamingEnumeration<SearchResult> resultList = ctx.search(userBaseDn, USER_FILTER, ctls);
-				while (resultList != null && resultList.hasMoreElements())
-				{
-					SearchResult searchResult = resultList.nextElement();
-					Attributes attributes = searchResult.getAttributes();
-					if (attributes == null || attributes.get("cn") == null)
-					{
-						log.warnv("no attributes found for: {0}", searchResult.getName());
-						continue;
-					}
-
-					String cn = (String) attributes.get("cn")
-					                               .get();
-					commonNames.add(cn);
-				}
-
-				// Examine the paged results control response
-				Control[] controls = ctx.getResponseControls();
-				if (controls != null)
-					for (Control control : controls)
-						if (control instanceof PagedResultsResponseControl prrc)
-							cookie = prrc.getCookie();
-
-				ctx.setRequestControls(new Control[] { new PagedResultsControl(pageSize, cookie, Control.CRITICAL) });
+				log.infov("no members found in group: {0}", userDn);
+				return groups;
 			}
-			while (cookie != null);
+
+			SearchResult searchResult = resultList.nextElement();
+			Attributes attributes = searchResult.getAttributes();
+			if (attributes == null)
+				return groups;
+
+			@SuppressWarnings("unchecked")
+			NamingEnumeration<Attribute> attributeList = (NamingEnumeration<Attribute>) attributes.getAll();
+			if (!attributeList.hasMoreElements())
+				return groups;
+
+			while (attributeList.hasMoreElements())
+			{
+				Attribute attribute = attributeList.nextElement();
+				log.debugv("attribute: {0}", attribute.getID());
+				if ("memberOf".equals(attribute.getID()))
+				{
+					@SuppressWarnings("unchecked")
+					NamingEnumeration<String> values = (NamingEnumeration<String>) attribute.getAll();
+					while (values.hasMoreElements())
+					{
+						String group = values.nextElement();
+						groups.add(group);
+						log.debugv("group: {0}", group);
+					}
+				}
+			}
 		}
-		catch (Exception ne)
+		catch (NamingException ne)
 		{
-			log.errorv("unable to obtain Common Names: {0}", ne.getMessage());
-			log.info("unable to connect to directory", ne);
-
-			throw ne;
+			log.errorv("error: {0}", ne.getMessage(), ne);
 		}
 
-		log.debugv("obtaining common names complete: {0}", commonNames.size());
+		log.debug("obtaining group information complete");
 
-		return commonNames;
+		return groups;
 	}
 
-	public Set<String> getGroupMembers(String groupName)
+	public Set<String> getGroupMembers(String groupDn)
 	{
 		Set<String> groupMembers = new HashSet<>();
 
-		log.debugv("obtaining group information: {0}", groupName);
+		log.debugv("obtaining group information: {0}", groupDn);
 
 		try
 		{
-			String dn = "cn=" + groupName + "," + groupBaseDn;
-
+			String attr = "member";
 			int rangeStep = 1500;
 			int rangeStart = 0;
 			int rangeEnd = rangeStart + rangeStep - 1;
 			boolean finished = false;
 			while (!finished)
 			{
-				String attr = "member";
 				String retAttr = attr + ";range=" + rangeStart + "-" + rangeEnd;
 
 				SearchControls ctls = new SearchControls();
@@ -228,10 +220,10 @@ public class ActiveDirectoryDAO
 				ctls.setReturningObjFlag(false);
 				ctls.setCountLimit(0);
 
-				NamingEnumeration<SearchResult> resultList = ctx.search(dn, "(objectclass=group)", ctls);
+				NamingEnumeration<SearchResult> resultList = ctx.search(groupDn, "(objectclass=group)", ctls);
 				if (resultList == null || !resultList.hasMoreElements())
 				{
-					log.infov("no members found in group: {0}", dn);
+					log.infov("no members found in group: {0}", groupDn);
 					return groupMembers;
 				}
 
@@ -273,7 +265,7 @@ public class ActiveDirectoryDAO
 		}
 		catch (Exception ne)
 		{
-			log.errorv("unable to obtain group: {0}", groupName);
+			log.errorv("unable to obtain group: {0}", groupDn);
 			log.info("unable to connect to directory", ne);
 
 			return groupMembers;
@@ -284,30 +276,28 @@ public class ActiveDirectoryDAO
 		return groupMembers;
 	}
 
-	public boolean groupExists(String groupName)
+	public boolean groupExists(String groupDn)
 	{
-		String dn = "cn=" + groupName + "," + groupBaseDn;
-
 		try
 		{
-			LdapContext group = (LdapContext) ctx.lookup(dn);
+			LdapContext group = (LdapContext) ctx.lookup(groupDn);
 			if (group == null)
 				log.info("null group!");
 		}
 		catch (NameNotFoundException nnfe)
 		{
-			log.infov("group does not exist: {0}", dn);
+			log.infov("group does not exist: {0}", groupDn);
 			return false;
 		}
 		catch (NamingException ne)
 		{
-			log.errorv("error checking group: {0}", dn, ne);
+			log.errorv("error checking group: {0}", groupDn, ne);
 		}
 
 		return true;
 	}
 
-	public String getUserDN(String oneId)
+	public String getUserDn(String oneId)
 	{
 		log.infov("searching ad for dn: {0}", oneId);
 		try
@@ -338,42 +328,35 @@ public class ActiveDirectoryDAO
 		return null;
 	}
 
-	public String getGroupDn(String groupName)
-	{
-		return "cn=" + groupName + "," + groupBaseDn;
-	}
-
-	public void addUserToGroup(String dn, String groupName)
+	public void addUserToGroup(String userDn, String groupDn)
 	{
 		try
 		{
-			String groupDn = "cn=" + groupName + "," + groupBaseDn;
-			ModificationItem mod = new ModificationItem(LdapContext.ADD_ATTRIBUTE, new BasicAttribute("member", dn));
+			ModificationItem mod = new ModificationItem(LdapContext.ADD_ATTRIBUTE, new BasicAttribute("member", userDn));
 			ctx.modifyAttributes(groupDn, new ModificationItem[] { mod });
 		}
 		catch (NamingException ne)
 		{
-			log.errorv("unable to add user to group: {0} -> {1}", dn, groupName);
+			log.errorv("unable to add user to group: {0} -> {1}", userDn, groupDn);
 			log.info("unable to add user to group:", ne);
 		}
 	}
 
-	public void delUserFromGroup(String dn, String groupName)
+	public void delUserFromGroup(String userDn, String groupDn)
 	{
 		try
 		{
-			String groupDn = "cn=" + groupName + "," + groupBaseDn;
-			ModificationItem mod = new ModificationItem(LdapContext.REMOVE_ATTRIBUTE, new BasicAttribute("member", dn));
+			ModificationItem mod = new ModificationItem(LdapContext.REMOVE_ATTRIBUTE, new BasicAttribute("member", userDn));
 			ctx.modifyAttributes(groupDn, new ModificationItem[] { mod });
 		}
 		catch (NamingException ne)
 		{
-			log.errorv("unable to remove user from group: {0} -> {1}", dn, groupName);
+			log.errorv("unable to remove user from group: {0} -> {1}", userDn, groupDn);
 			log.info("unable to remove user from group:", ne);
 		}
 	}
 
-	public void addGroup(String groupName)
+	public void addGroup(String groupBaseDn, String groupName)
 	{
 		Attribute objectClass = new BasicAttribute("objectClass");
 		objectClass.add("top");
@@ -391,7 +374,6 @@ public class ActiveDirectoryDAO
 		container.put(sAMAccountName);
 
 		String dn = "cn=" + groupName + "," + groupBaseDn;
-
 		try
 		{
 			ctx.createSubcontext(dn, container);
@@ -633,8 +615,10 @@ public class ActiveDirectoryDAO
 		return null;
 	}
 
-	public Date getDateFromTimestamp(String timestamp)
+	public static Date getDateFromTimestamp(String timestamp)
 	{
+		if (timestamp == null)
+			return null;
 		long time = (Long.parseLong(timestamp) / 10000L) - +11644473600000L;
 		return new Date(time);
 	}
