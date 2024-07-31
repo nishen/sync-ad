@@ -4,7 +4,6 @@ import cops.sync.ad.dao.ActiveDirectoryDAO;
 import cops.sync.ad.entity.adinfo.ActiveDirectoryGroup;
 import cops.sync.ad.entity.adinfo.ActiveDirectoryUser;
 import io.quarkus.hibernate.orm.PersistenceUnit;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.QuarkusApplication;
 import io.quarkus.runtime.annotations.QuarkusMain;
 import jakarta.enterprise.context.control.ActivateRequestContext;
@@ -16,7 +15,10 @@ import org.jboss.logging.Logger;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static java.util.stream.Collectors.*;
 
@@ -118,38 +120,45 @@ public class App2 implements QuarkusApplication
 			log.infov("fetched users from db: {0}", users.size());
 
 			//TODO: Create group -> members rather than members -> groups
+			groups.entrySet()
+			      .stream()
+			      .peek(e -> log.infov("group: {0}", e.getKey()))
+			      .forEach(e -> e.getValue()
+			                     .getMembers()
+			                     .addAll(ad.getGroupMembers(e.getKey())
+			                               .stream()
+			                               .map(users::get)
+			                               .collect(toSet())));
 
-
-
-			log.info("mapping users to groups - phase 1");
-			Map<String, Set<ActiveDirectoryUser>> userGroupMapping;
-			userGroupMapping = users.values()
-			                        .stream()
-			                        .flatMap(u -> ad.getUserGroups(u.getDn())
-			                                        .stream()
-			                                        .map(g -> Map.entry(g, users.get(u.getDn()))))
-			                        .collect(groupingBy(Map.Entry::getKey, mapping(Map.Entry::getValue, toSet())));
-
-			log.info("mapping users to groups - phase 2");
-			userGroupMapping.entrySet()
-			                .stream()
-			                .filter(e -> groups.get(e.getKey()) == null)
-			                .forEach(e -> log.warnv("missing group for mapping: {0}", e.getKey()));
-
-			log.info("mapping users to groups - phase 3");
-			userGroupMapping.entrySet()
-			                .stream()
-			                .filter(e -> groups.get(e.getKey()) != null)
-			                .forEach(e -> groups.get(e.getKey())
-			                                    .getMembers()
-			                                    .addAll(e.getValue()));
+			//			log.info("mapping users to groups - phase 1");
+			//			Map<String, Set<ActiveDirectoryUser>> userGroupMapping;
+			//			userGroupMapping = users.values()
+			//			                        .stream()
+			//			                        .flatMap(u -> ad.getUserGroups(u.getDn())
+			//			                                        .stream()
+			//			                                        .map(g -> Map.entry(g, users.get(u.getDn()))))
+			//			                        .collect(groupingBy(Map.Entry::getKey, mapping(Map.Entry::getValue, toSet())));
+			//
+			//			log.info("mapping users to groups - phase 2");
+			//			userGroupMapping.entrySet()
+			//			                .stream()
+			//			                .filter(e -> groups.get(e.getKey()) == null)
+			//			                .forEach(e -> log.warnv("missing group for mapping: {0}", e.getKey()));
+			//
+			//			log.info("mapping users to groups - phase 3");
+			//			userGroupMapping.entrySet()
+			//			                .stream()
+			//			                .filter(e -> groups.get(e.getKey()) != null)
+			//			                .forEach(e -> groups.get(e.getKey())
+			//			                                    .getMembers()
+			//			                                    .addAll(e.getValue()));
 
 			log.info("updating db with group/user mappings");
 			groups.values()
 			      .forEach(em::merge);
 
-			log.infov("saved: {0}", userGroupMapping.values()
-			                                        .size());
+			log.infov("saved: {0}", groups.values()
+			                              .size());
 		}
 		catch (Exception e)
 		{
