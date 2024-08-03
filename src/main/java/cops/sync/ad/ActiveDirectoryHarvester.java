@@ -16,6 +16,9 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.stream.Collectors.toMap;
@@ -111,30 +114,36 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 					  .collect(toMap(ActiveDirectoryUser::getDn, u -> u, (x, y) -> x));
 			log.infov("fetched users from db: {0}", users.size());
 
-			log.info("fetching group members from ad");
-			Map<String, Set<String>> groupMembers = groups.keySet()
-			                                              .parallelStream()
-			                                              .map(g -> Map.entry(g, ad.getGroupMembers(g)))
-			                                              .peek(e -> log.infov("group[{0}: {1}", e.getKey(), e.getValue().size()))
-			                                              .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-			Map<String, Set<ActiveDirectoryUser>> groupMembersResolved;
-			groupMembersResolved = groupMembers.entrySet()
-			                                   .stream()
-			                                   .map(e -> Map.entry(e.getKey(), e.getValue()
-			                                                                    .stream()
-			                                                                    .map(users::get)
-			                                                                    .filter(Objects::nonNull)
-			                                                                    .collect(toSet())))
-			                                   .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-			groups.forEach((k, v) -> v.getMembers()
-			                          .addAll(groupMembersResolved.get(k)));
+			log.info("fetching ad group/member mappings");
+			Map<String, CompletableFuture<Set<ActiveDirectoryUser>>> result = new HashMap<>();
+			for (Map.Entry<String, ActiveDirectoryGroup> e : groups.entrySet())
+			{
+				result.put(e.getKey(), CompletableFuture.supplyAsync(() -> ad.getGroupMembers(e.getKey())
+				                                                             .stream()
+				                                                             .map(users::get)
+				                                                             .collect(toSet()),
+				                                                     Executors.newVirtualThreadPerTaskExecutor()));
+			}
 
 			log.info("updating db with group/user mappings");
-			save(groups.values(), 10, "user/group mapping");
-			log.infov("saved: {0}", groups.values()
-			                              .size());
+			for (Map.Entry<String, CompletableFuture<Set<ActiveDirectoryUser>>> e : result.entrySet())
+			{
+				try
+				{
+					groups.get(e.getKey())
+					      .getMembers()
+					      .addAll(e.getValue()
+					               .get());
+					save(Set.of(groups.get(e.getKey())), 1, String.format("[%,6d]: %s", groups.get(e.getKey())
+					                                                                          .getMembers()
+					                                                                          .size(), e.getKey()));
+				}
+				catch (InterruptedException | ExecutionException ie)
+				{
+					log.error(ie);
+					log.errorv("error: {0}", ie.getMessage(), ie);
+				}
+			}
 		}
 		catch (Exception e)
 		{
@@ -146,21 +155,21 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 	public <T> void save(Collection<T> objects, int batchSize, String name)
 	{
 		Set<T> batch = new HashSet<>();
-		AtomicInteger count = new AtomicInteger();
+		AtomicInteger count = new AtomicInteger(0);
 		objects.forEach(y -> {
 			batch.add(y);
 			if (count.incrementAndGet() % batchSize == 0)
 			{
 				saveBatch(batch);
 				batch.clear();
-				log.infov("saving {2}: {0}/{1}", count.get(), objects.size(), name);
+				log.infov("saving {0}: {1}/{2}", name, count.get(), objects.size());
 			}
 		});
 
 		if (!batch.isEmpty())
 		{
 			saveBatch(batch);
-			log.infov("saving {2}: {0}/{1}", count.get(), objects.size(), name);
+			log.infov("saving {0}: {1}/{2}", name, count.get(), objects.size());
 		}
 	}
 
