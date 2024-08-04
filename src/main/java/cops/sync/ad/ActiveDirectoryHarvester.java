@@ -16,19 +16,28 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.stream.Collectors.toMap;
-import static java.util.stream.Collectors.toSet;
 
 @QuarkusMain
 @ActivateRequestContext
 public class ActiveDirectoryHarvester implements QuarkusApplication
 {
 	static final Logger log = Logger.getLogger(ActiveDirectoryHarvester.class);
+
+	static final List<String> OU_USER_BASE =
+			List.of("CN=Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au", "OU=MQ-Admin,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
+			        "OU=MQ-BusUnit-Res,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
+			        "OU=MQ-Cohorts,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
+			        "OU=MQ-Global,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
+			        "OU=MQ-Kyndryl,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
+			        "OU=MQ-Resources,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
+			        "OU=Office365,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au", "OU=test,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
+			        "OU=zz-HPC-Test2,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
+			        //			        "OU=Active,OU=MQ-Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
+			        //			        "OU=Inactive,OU=MQ-Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
+			        "OU=Suspended,OU=MQ-Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au");
 
 	@Inject
 	@PersistenceUnit("adinfo")
@@ -40,8 +49,8 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 	@Override
 	public int run(String... args)
 	{
-		updateGroups();
-		updateUsers();
+		//		updateGroups();
+		//		updateUsers();
 		updateGroupMembership();
 
 		return 0;
@@ -51,14 +60,9 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 	{
 		try
 		{
-			log.info("fetching groups from ad");
-			List<ActiveDirectoryGroup> groups =
-					ad.getGroups("OU=LIB,OU=MQ-BusUnit-Res,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-					             Set.of("distinguishedName", "cn", "whenChanged", "whenCreated"))
-					  .values()
-					  .parallelStream()
-					  .map(this::makeActiveDirectoryGroup)
-					  .toList();
+			log.info("processing ad groups");
+
+			List<ActiveDirectoryGroup> groups = getGroupsFromAd("DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au");
 			log.infov("fetched groups from ad: {0}", groups.size());
 
 			save(groups, 1000, "groups");
@@ -68,6 +72,7 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		{
 			log.error(e);
 			log.errorv("error: {0}", e.getMessage(), e);
+			e.printStackTrace();
 		}
 	}
 
@@ -76,23 +81,20 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		try
 		{
 			log.info("fetching users from ad");
-			List<ActiveDirectoryUser> users =
-					ad.getUsers("OU=Staff,OU=Active,OU=MQ-Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-					            Set.of("distinguishedName", "cn", "sAMAccountName", "displayName", "lastLogonTimestamp",
-					                   "accountExpires", "pwdLastSet", "whenChanged", "whenCreated"))
-					  .values()
-					  .parallelStream()
-					  .map(this::makeActiveDirectoryUser)
-					  .toList();
-			log.infov("fetched users from ad: {0}", users.size());
+			List<ActiveDirectoryUser> users = OU_USER_BASE.stream()
+			                                              .peek(g -> log.infov("fetching users from: {0}", g))
+			                                              .map(this::getUsersFromAd)
+			                                              .peek(g -> log.infov("found users: {0}", g.size()))
+			                                              .flatMap(Collection::stream)
+			                                              .toList();
 
-			save(users, 2000, "users");
-			log.infov("saved users to db: {0}", users.size());
+			save(users, 2000, "ad users");
 		}
 		catch (Exception e)
 		{
 			log.error(e);
 			log.errorv("error: {0}", e.getMessage(), e);
+			e.printStackTrace();
 		}
 	}
 
@@ -100,12 +102,9 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 	{
 		try
 		{
-			log.info("fetching groups from db");
-			Map<String, ActiveDirectoryGroup> groups =
-					em.createQuery("select g from ActiveDirectoryGroup g", ActiveDirectoryGroup.class)
-					  .getResultStream()
-					  .collect(toMap(ActiveDirectoryGroup::getDn, g -> g, (x, y) -> x));
-			log.infov("fetched groups from db: {0}", groups.size());
+			log.info("fetching groups from ad");
+			List<ActiveDirectoryGroup> groups = getGroupsFromAd("DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au");
+			log.infov("fetched groups from ad: {0}", groups.size());
 
 			log.info("fetching users from db");
 			Map<String, ActiveDirectoryUser> users =
@@ -115,68 +114,45 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 			log.infov("fetched users from db: {0}", users.size());
 
 			log.info("fetching ad group/member mappings");
-			Map<String, CompletableFuture<Set<ActiveDirectoryUser>>> result = new HashMap<>();
-			for (Map.Entry<String, ActiveDirectoryGroup> e : groups.entrySet())
-			{
-				result.put(e.getKey(), CompletableFuture.supplyAsync(() -> ad.getGroupMembers(e.getKey())
-				                                                             .stream()
-				                                                             .map(users::get)
-				                                                             .collect(toSet()),
-				                                                     Executors.newVirtualThreadPerTaskExecutor()));
-			}
+			groups.stream()
+			      .peek(g -> log.infov("processing group: {0}", g.getCn()))
+			      .forEach(group -> ad.getGroupMembers(group.getDn())
+			                          .stream()
+			                          .map(users::get)
+			                          .filter(Objects::nonNull)
+			                          .forEach(u -> group.getMembers()
+			                                             .add(u)));
 
-			log.info("updating db with group/user mappings");
-			for (Map.Entry<String, CompletableFuture<Set<ActiveDirectoryUser>>> e : result.entrySet())
-			{
-				try
-				{
-					groups.get(e.getKey())
-					      .getMembers()
-					      .addAll(e.getValue()
-					               .get());
-					save(Set.of(groups.get(e.getKey())), 1, String.format("[%,6d]: %s", groups.get(e.getKey())
-					                                                                          .getMembers()
-					                                                                          .size(), e.getKey()));
-				}
-				catch (InterruptedException | ExecutionException ie)
-				{
-					log.error(ie);
-					log.errorv("error: {0}", ie.getMessage(), ie);
-				}
-			}
+			log.info("saving group/member mappings to db");
+			save(groups, 1, "group");
 		}
 		catch (Exception e)
 		{
 			log.error(e);
 			log.errorv("error: {0}", e.getMessage(), e);
+			e.printStackTrace();
 		}
 	}
 
-	public <T> void save(Collection<T> objects, int batchSize, String name)
+	private List<ActiveDirectoryUser> getUsersFromAd(String dn)
 	{
-		Set<T> batch = new HashSet<>();
-		AtomicInteger count = new AtomicInteger(0);
-		objects.forEach(y -> {
-			batch.add(y);
-			if (count.incrementAndGet() % batchSize == 0)
-			{
-				saveBatch(batch);
-				batch.clear();
-				log.infov("saving {0}: {1}/{2}", name, count.get(), objects.size());
-			}
-		});
+		log.infov("getting users from ad: {0}", dn);
 
-		if (!batch.isEmpty())
-		{
-			saveBatch(batch);
-			log.infov("saving {0}: {1}/{2}", name, count.get(), objects.size());
-		}
+		return ad.getUsers(dn, Set.of("distinguishedName", "cn", "whenChanged", "whenCreated", "sAMAccountName",
+		                              "displayName", "lastLogonTimestamp", "accountExpires", "pwdLastSet"))
+		         .values()
+		         .stream()
+		         .map(this::makeActiveDirectoryUser)
+		         .toList();
 	}
 
-	@Transactional
-	public <T> void saveBatch(Collection<T> objects)
+	private List<ActiveDirectoryGroup> getGroupsFromAd(String dn)
 	{
-		objects.forEach(em::merge);
+		return ad.getGroups(dn, Set.of("distinguishedName", "cn", "whenChanged", "whenCreated"))
+		         .values()
+		         .parallelStream()
+		         .map(this::makeActiveDirectoryGroup)
+		         .toList();
 	}
 
 	private ActiveDirectoryGroup makeActiveDirectoryGroup(Map<String, String> data)
@@ -194,10 +170,15 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		group.setCn(data.get("cn"));
 		group.setNormalisedDn(normalised_dn);
 
+		String whenCreated = data.get("whenCreated");
+		String whenChanged = data.get("whenChanged");
 		try
 		{
-			group.setCreated(addf.parse(data.get("whenCreated")));
-			group.setUpdated(addf.parse(data.get("whenChanged")));
+			if (whenCreated != null && !whenCreated.isEmpty())
+				group.setCreated(addf.parse(data.get("whenCreated")));
+
+			if (whenChanged != null && !whenChanged.isEmpty())
+				group.setUpdated(addf.parse(data.get("whenChanged")));
 		}
 		catch (ParseException pe)
 		{
@@ -228,10 +209,15 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		user.setAccountExpires(ActiveDirectoryDAO.getDateFromTimestamp(data.get("accountExpires")));
 		user.setPasswordLastSet(ActiveDirectoryDAO.getDateFromTimestamp(data.get("pwdLastSet")));
 
+		String whenCreated = data.get("whenCreated");
+		String whenChanged = data.get("whenChanged");
 		try
 		{
-			user.setCreated(addf.parse(data.get("whenCreated")));
-			user.setUpdated(addf.parse(data.get("whenChanged")));
+			if (whenCreated != null && !whenCreated.isEmpty())
+				user.setCreated(addf.parse(data.get("whenCreated")));
+
+			if (whenChanged != null && !whenChanged.isEmpty())
+				user.setUpdated(addf.parse(data.get("whenChanged")));
 		}
 		catch (ParseException pe)
 		{
@@ -240,5 +226,60 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		}
 
 		return user;
+	}
+
+	public <T> void save(Collection<T> objects, int batchSize, String name)
+	{
+		Set<T> batch = new HashSet<>();
+		AtomicInteger count = new AtomicInteger(0);
+		objects.forEach(y -> {
+			try
+			{
+				batch.add(y);
+				if (count.incrementAndGet() % batchSize == 0)
+				{
+					saveBatch(batch);
+					batch.clear();
+					log.infov("saving {0}: {1}/{2}", name, count.get(), objects.size());
+				}
+			}
+			catch (Exception e)
+			{
+				log.error(e);
+				log.errorv("error: {0}", e.getMessage(), e);
+				e.printStackTrace();
+			}
+		});
+
+		try
+		{
+			if (!batch.isEmpty())
+			{
+				saveBatch(batch);
+				log.infov("saving {0}: {1}/{2}", name, count.get(), objects.size());
+			}
+		}
+		catch (Exception e)
+		{
+			log.error(e);
+			log.errorv("error: {0}", e.getMessage(), e);
+			e.printStackTrace();
+		}
+	}
+
+	@Transactional
+	public <T> void saveBatch(Collection<T> objects)
+	{
+		for (T o : objects)
+			try
+			{
+				em.merge(o);
+			}
+			catch (Exception e)
+			{
+				log.error(e);
+				log.errorv("error: {0}", e.getMessage(), e);
+				e.printStackTrace();
+			}
 	}
 }
