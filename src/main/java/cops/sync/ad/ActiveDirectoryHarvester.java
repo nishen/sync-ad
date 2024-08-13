@@ -12,6 +12,9 @@ import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -35,8 +38,8 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 			        "OU=MQ-Resources,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
 			        "OU=Office365,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au", "OU=test,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
 			        "OU=zz-HPC-Test2,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-			        //			        "OU=Active,OU=MQ-Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-			        //			        "OU=Inactive,OU=MQ-Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
+			        "OU=Active,OU=MQ-Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
+			        "OU=Inactive,OU=MQ-Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
 			        "OU=Suspended,OU=MQ-Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au");
 
 	@Inject
@@ -49,8 +52,8 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 	@Override
 	public int run(String... args)
 	{
-		//		updateGroups();
-		//		updateUsers();
+		updateGroups();
+		updateUsers();
 		updateGroupMembership();
 
 		return 0;
@@ -123,8 +126,10 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 			                          .forEach(u -> group.getMembers()
 			                                             .add(u)));
 
-			log.info("saving group/member mappings to db");
-			save(groups, 1, "group");
+			//			log.info("saving group/member mappings to db");
+			//			save(groups, 1, "group");
+			log.info("saving group/member mappings to file");
+			saveToFile(groups, "D:/Temp/group-member.csv");
 		}
 		catch (Exception e)
 		{
@@ -281,5 +286,33 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 				log.errorv("error: {0}", e.getMessage(), e);
 				e.printStackTrace();
 			}
+	}
+
+	public void saveToFile(List<ActiveDirectoryGroup> groups, String filename)
+	{
+		try
+		{
+			FileOutputStream out = new FileOutputStream(filename);
+			groups.forEach(g -> g.getMembers()
+			                     .forEach(m -> {
+				                     try
+				                     {
+					                     out.write(String.format("%s,%s\n", g.getName(), m.getName())
+					                                     .getBytes(StandardCharsets.UTF_8));
+				                     }
+				                     catch (IOException e)
+				                     {
+					                     throw new RuntimeException(e);
+				                     }
+			                     }));
+			out.flush();
+			out.close();
+		}
+		catch (IOException ioe)
+		{
+			log.error(ioe);
+			log.errorv("error: {0}", ioe.getMessage(), ioe);
+			ioe.printStackTrace();
+		}
 	}
 }
