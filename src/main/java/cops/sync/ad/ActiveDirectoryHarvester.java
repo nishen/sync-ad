@@ -52,8 +52,8 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 	@Override
 	public int run(String... args)
 	{
-		updateGroups();
-		updateUsers();
+		//		updateGroups();
+		//		updateUsers();
 		updateGroupMembership();
 
 		return 0;
@@ -126,10 +126,10 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 			                          .forEach(u -> group.getMembers()
 			                                             .add(u)));
 
-			//			log.info("saving group/member mappings to db");
-			//			save(groups, 1, "group");
+//			log.info("saving group/member mappings to db");
+//			save(groups, 1, "group");
 			log.info("saving group/member mappings to file");
-			saveToFile(groups, "D:/Temp/group-member.csv");
+			saveToFile(groups, "C:/Temp/group-member.csv");
 		}
 		catch (Exception e)
 		{
