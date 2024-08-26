@@ -52,9 +52,9 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 	@Override
 	public int run(String... args)
 	{
-		//		updateGroups();
-		//		updateUsers();
-		updateGroupMembership();
+		updateGroups();
+		updateUsers();
+		//		updateGroupMembership();
 
 		return 0;
 	}
@@ -91,7 +91,16 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 			                                              .flatMap(Collection::stream)
 			                                              .toList();
 
-			save(users, 2000, "ad users");
+			List<ActiveDirectoryUser> noId = users.stream()
+			                                      .filter(u -> u.getSamAccountName() == null)
+			                                      .toList();
+
+			noId.forEach(u -> log.infov("missing samAccountName: {0}", u.getName()));
+			List<ActiveDirectoryUser> usersWithId = users.stream()
+			                                      .filter(u -> u.getSamAccountName() != null)
+			                                      .toList();
+
+			save(usersWithId, 2000, "ad users");
 		}
 		catch (Exception e)
 		{
@@ -126,10 +135,10 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 			                          .forEach(u -> group.getMembers()
 			                                             .add(u)));
 
-//			log.info("saving group/member mappings to db");
-//			save(groups, 1, "group");
-			log.info("saving group/member mappings to file");
-			saveToFile(groups, "C:/Temp/group-member.csv");
+			log.info("saving group/member mappings to db");
+			save(groups, 1, "group");
+			//			log.info("saving group/member mappings to file");
+			//			saveToFile(groups, "C:/Temp/group-member.csv");
 		}
 		catch (Exception e)
 		{
@@ -153,7 +162,7 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 
 	private List<ActiveDirectoryGroup> getGroupsFromAd(String dn)
 	{
-		return ad.getGroups(dn, Set.of("distinguishedName", "cn", "whenChanged", "whenCreated"))
+		return ad.getGroups(dn, Set.of("sAMAccountName", "distinguishedName", "cn", "whenChanged", "whenCreated"))
 		         .values()
 		         .parallelStream()
 		         .map(this::makeActiveDirectoryGroup)
@@ -170,6 +179,7 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		                                              .reversed());
 
 		ActiveDirectoryGroup group = new ActiveDirectoryGroup();
+		group.setSamAccountName(data.get("sAMAccountName"));
 		group.setName(data.get("cn"));
 		group.setDn(data.get("distinguishedName"));
 		group.setCn(data.get("cn"));
@@ -204,11 +214,11 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		String normalised_dn = String.join(",", Arrays.asList(dnparts)
 		                                              .reversed());
 
+		user.setSamAccountName(data.get("sAMAccountName"));
 		user.setName(data.get("cn"));
 		user.setDn(data.get("distinguishedName"));
 		user.setNormalisedDn(normalised_dn);
 		user.setCn(data.get("cn"));
-		user.setSamAccountName(data.get("sAMAccountName"));
 		user.setDisplayName(data.get("displayName"));
 		user.setLastLogon(ActiveDirectoryDAO.getDateFromTimestamp(data.get("lastLogonTimestamp")));
 		user.setAccountExpires(ActiveDirectoryDAO.getDateFromTimestamp(data.get("accountExpires")));
