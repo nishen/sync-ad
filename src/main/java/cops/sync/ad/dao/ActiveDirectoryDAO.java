@@ -332,7 +332,8 @@ public class ActiveDirectoryDAO
 	{
 		try
 		{
-			ModificationItem mod = new ModificationItem(LdapContext.ADD_ATTRIBUTE, new BasicAttribute("member", userDn));
+			ModificationItem mod =
+					new ModificationItem(LdapContext.ADD_ATTRIBUTE, new BasicAttribute("member", userDn));
 			ctx.modifyAttributes(groupDn, new ModificationItem[] { mod });
 		}
 		catch (NamingException ne)
@@ -346,7 +347,8 @@ public class ActiveDirectoryDAO
 	{
 		try
 		{
-			ModificationItem mod = new ModificationItem(LdapContext.REMOVE_ATTRIBUTE, new BasicAttribute("member", userDn));
+			ModificationItem mod =
+					new ModificationItem(LdapContext.REMOVE_ATTRIBUTE, new BasicAttribute("member", userDn));
 			ctx.modifyAttributes(groupDn, new ModificationItem[] { mod });
 		}
 		catch (NamingException ne)

@@ -66,15 +66,18 @@ public class ActiveDirectoryConfigUtil
 		Map<String, Set<String>> aliases = new HashMap<>();
 
 		JsonNode aliasesNode = root.get("aliases");
-		aliasesNode.forEach(p -> p.fields().forEachRemaining(n -> {
-			log.debugv("n.key: {0}", n.getKey());
-			aliases.computeIfAbsent(n.getKey(), k -> new TreeSet<>());
+		aliasesNode.forEach(p -> p.fields()
+		                          .forEachRemaining(n -> {
+			                          log.debugv("n.key: {0}", n.getKey());
+			                          aliases.computeIfAbsent(n.getKey(), k -> new TreeSet<>());
 
-			n.getValue().forEach(v -> {
-				log.debugv("n.val: {0}", v.textValue());
-				aliases.get(n.getKey()).add(v.textValue());
-			});
-		}));
+			                          n.getValue()
+			                           .forEach(v -> {
+				                           log.debugv("n.val: {0}", v.textValue());
+				                           aliases.get(n.getKey())
+				                                  .add(v.textValue());
+			                           });
+		                          }));
 
 		return aliases;
 	}
@@ -84,16 +87,19 @@ public class ActiveDirectoryConfigUtil
 		Map<String, Set<String>> groups = new HashMap<>();
 
 		JsonNode groupNode = root.get("groups");
-		groupNode.forEach(p -> p.fields().forEachRemaining(n -> {
-			String groupName = n.getKey();
-			log.debugv("n.key: {0}", groupName);
-			groups.computeIfAbsent(groupName, k -> new TreeSet<>());
+		groupNode.forEach(p -> p.fields()
+		                        .forEachRemaining(n -> {
+			                        String groupName = n.getKey();
+			                        log.debugv("n.key: {0}", groupName);
+			                        groups.computeIfAbsent(groupName, k -> new TreeSet<>());
 
-			n.getValue().forEach(v -> {
-				log.debugv("n.val: {0}", v.textValue());
-				groups.get(groupName).add(v.textValue());
-			});
-		}));
+			                        n.getValue()
+			                         .forEach(v -> {
+				                         log.debugv("n.val: {0}", v.textValue());
+				                         groups.get(groupName)
+				                               .add(v.textValue());
+			                         });
+		                        }));
 
 		return groups;
 	}
@@ -101,11 +107,15 @@ public class ActiveDirectoryConfigUtil
 	private static Map.Entry<String, Set<String>> resolveAliases(Map.Entry<String, Set<String>> alias,
 	                                                             Map<String, Set<String>> originalAliases)
 	{
-		alias.setValue(alias.getValue().stream().map(s -> {
-			if (s.startsWith("a:"))
-				return originalAliases.get(s.substring(2));
-			return Set.of(s);
-		}).flatMap(Collection::stream).collect(toCollection(TreeSet::new)));
+		alias.setValue(alias.getValue()
+		                    .stream()
+		                    .map(s -> {
+			                    if (s.startsWith("a:"))
+				                    return originalAliases.get(s.substring(2));
+			                    return Set.of(s);
+		                    })
+		                    .flatMap(Collection::stream)
+		                    .collect(toCollection(TreeSet::new)));
 
 		return alias;
 	}

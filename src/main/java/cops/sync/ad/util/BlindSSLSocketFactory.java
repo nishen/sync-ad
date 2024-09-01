@@ -17,18 +17,19 @@ public class BlindSSLSocketFactory extends SocketFactory
 
 	static
 	{
-		TrustManager[] blindTrustMan = new TrustManager[] { new X509TrustManager() {
+		TrustManager[] blindTrustMan = new TrustManager[] { new X509TrustManager()
+		{
 			public java.security.cert.X509Certificate[] getAcceptedIssuers()
 			{
 				return null;
 			}
 
-			public void checkClientTrusted(java.security.cert.X509Certificate[] chain,
-			                               String authType) throws CertificateException
+			public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType)
+					throws CertificateException
 			{}
 
-			public void checkServerTrusted(java.security.cert.X509Certificate[] chain,
-			                               String authType) throws CertificateException
+			public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType)
+					throws CertificateException
 			{}
 		} };
 
@@ -59,8 +60,8 @@ public class BlindSSLSocketFactory extends SocketFactory
 		return blindFactory.createSocket(arg0, arg1);
 	}
 
-	public Socket createSocket(String arg0, int arg1, InetAddress arg2, int arg3) throws IOException,
-	                                                                              UnknownHostException
+	public Socket createSocket(String arg0, int arg1, InetAddress arg2, int arg3)
+			throws IOException, UnknownHostException
 	{
 		return blindFactory.createSocket(arg0, arg1, arg2, arg3);
 	}
