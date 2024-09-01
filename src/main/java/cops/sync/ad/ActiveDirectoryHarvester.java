@@ -52,9 +52,9 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 	@Override
 	public int run(String... args)
 	{
-		updateGroups();
-		updateUsers();
-		//		updateGroupMembership();
+//		updateGroups();
+//		updateUsers();
+		updateGroupMembership();
 
 		return 0;
 	}
@@ -97,8 +97,8 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 
 			noId.forEach(u -> log.infov("missing samAccountName: {0}", u.getName()));
 			List<ActiveDirectoryUser> usersWithId = users.stream()
-			                                      .filter(u -> u.getSamAccountName() != null)
-			                                      .toList();
+			                                             .filter(u -> u.getSamAccountName() != null)
+			                                             .toList();
 
 			save(usersWithId, 2000, "ad users");
 		}
@@ -135,10 +135,10 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 			                          .forEach(u -> group.getMembers()
 			                                             .add(u)));
 
-			log.info("saving group/member mappings to db");
-			save(groups, 1, "group");
-			//			log.info("saving group/member mappings to file");
-			//			saveToFile(groups, "C:/Temp/group-member.csv");
+//			log.info("saving group/member mappings to db");
+//			save(groups, 1, "group");
+			log.info("saving group/member mappings to file");
+			saveToFile(groups, "C:/Temp/group-member.csv");
 		}
 		catch (Exception e)
 		{
