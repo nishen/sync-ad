@@ -1,4 +1,4 @@
-# cops-sync-ad
+# sync-ad
 
 This project uses Quarkus, the Supersonic Subatomic Java Framework.
 
