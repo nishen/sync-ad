@@ -29,18 +29,9 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 {
 	static final Logger log = Logger.getLogger(ActiveDirectoryHarvester.class);
 
-	static final List<String> OU_USER_BASE =
-			List.of("CN=Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au", "OU=MQ-Admin,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-			        "OU=MQ-BusUnit-Res,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-			        "OU=MQ-Cohorts,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-			        "OU=MQ-Global,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-			        "OU=MQ-Kyndryl,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-			        "OU=MQ-Resources,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-			        "OU=Office365,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au", "OU=test,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-			        "OU=zz-HPC-Test2,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-			        "OU=Active,OU=MQ-Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-			        "OU=Inactive,OU=MQ-Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au",
-			        "OU=Suspended,OU=MQ-Users,DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au");
+	static final String GROUP_BASE_DN = "DC=nd,DC=edu,DC=au";
+
+	static final List<String> OU_USER_BASE = List.of("DC=nd,DC=edu,DC=au");
 
 	@Inject
 	@PersistenceUnit("adinfo")
@@ -65,7 +56,7 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		{
 			log.info("processing ad groups");
 
-			List<ActiveDirectoryGroup> groups = getGroupsFromAd("DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au");
+			List<ActiveDirectoryGroup> groups = getGroupsFromAd(GROUP_BASE_DN);
 			log.infov("fetched groups from ad: {0}", groups.size());
 
 			save(groups, 1000, "groups");
@@ -75,7 +66,6 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		{
 			log.error(e);
 			log.errorv("error: {0}", e.getMessage(), e);
-			e.printStackTrace();
 		}
 	}
 
@@ -106,7 +96,6 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		{
 			log.error(e);
 			log.errorv("error: {0}", e.getMessage(), e);
-			e.printStackTrace();
 		}
 	}
 
@@ -115,7 +104,7 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		try
 		{
 			log.info("fetching groups from ad");
-			List<ActiveDirectoryGroup> groups = getGroupsFromAd("DC=mqauth,DC=uni,DC=mq,DC=edu,DC=au");
+			List<ActiveDirectoryGroup> groups = getGroupsFromAd(GROUP_BASE_DN);
 			log.infov("fetched groups from ad: {0}", groups.size());
 
 			log.info("fetching users from db");
@@ -262,7 +251,6 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 			{
 				log.error(e);
 				log.errorv("error: {0}", e.getMessage(), e);
-				e.printStackTrace();
 			}
 		});
 
@@ -278,7 +266,6 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		{
 			log.error(e);
 			log.errorv("error: {0}", e.getMessage(), e);
-			e.printStackTrace();
 		}
 	}
 
@@ -294,7 +281,6 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 			{
 				log.error(e);
 				log.errorv("error: {0}", e.getMessage(), e);
-				e.printStackTrace();
 			}
 	}
 
@@ -307,7 +293,7 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 			                     .forEach(m -> {
 				                     try
 				                     {
-					                     out.write(String.format("%s,%s\n", g.getName(), m.getName())
+					                     out.write(String.format("%s,%s\n", g.getSamAccountName(), m.getSamAccountName())
 					                                     .getBytes(StandardCharsets.UTF_8));
 				                     }
 				                     catch (IOException e)
@@ -322,7 +308,6 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		{
 			log.error(ioe);
 			log.errorv("error: {0}", ioe.getMessage(), ioe);
-			ioe.printStackTrace();
 		}
 	}
 }
