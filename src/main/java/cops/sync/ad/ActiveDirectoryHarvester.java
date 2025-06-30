@@ -29,9 +29,21 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 {
 	static final Logger log = Logger.getLogger(ActiveDirectoryHarvester.class);
 
-	static final String GROUP_BASE_DN = "DC=nd,DC=edu,DC=au";
+	static final List<String> OU_GROUP_BASES = List.of("DC=nd,DC=edu,DC=au");
 
-	static final List<String> OU_USER_BASE = List.of("DC=nd,DC=edu,DC=au");
+	static final List<String> OU_USER_BASES = List.of("DC=nd,DC=edu,DC=au");
+
+	static final Set<String> LDAP_ATTRIBUTES_USER =
+			Set.of("samAccountName", "name", "distinguishedName", "cn", "description", "whenCreated", "whenChanged",
+			       "pwdLastSet", "accountExpires", "lastLogonTimestamp", "displayName", "userPrincipalName", "mail",
+			       "mailNickname", "division", "employeeType", "flags", "extensionAttribute1", "extensionAttribute2",
+			       "extensionAttribute3", "extensionAttribute4", "extensionAttribute5", "extensionAttribute6",
+			       "extensionAttribute7", "extensionAttribute8", "extensionAttribute9", "extensionAttribute10",
+			       "extensionAttribute11", "extensionAttribute12", "extensionAttribute13", "extensionAttribute14",
+			       "extensionAttribute15", "extensionAttribute16");
+
+	static final Set<String> LDAP_ATTRIBUTES_GROUP =
+			Set.of("sAMAccountName", "distinguishedName", "cn", "whenChanged", "whenCreated");
 
 	@Inject
 	@PersistenceUnit("adinfo")
@@ -56,7 +68,13 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		{
 			log.info("processing ad groups");
 
-			List<ActiveDirectoryGroup> groups = getGroupsFromAd(GROUP_BASE_DN);
+			List<ActiveDirectoryGroup> groups;
+			groups = OU_GROUP_BASES.stream()
+			                       .peek(g -> log.infov("fetching group: {0}", g))
+			                       .map(this::getGroupsFromAd)
+			                       .peek(g -> log.infov("found groups: {0}", g.size()))
+			                       .flatMap(Collection::stream)
+			                       .toList();
 			log.infov("fetched groups from ad: {0}", groups.size());
 
 			save(groups, 1000, "groups");
@@ -74,12 +92,12 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		try
 		{
 			log.info("fetching users from ad");
-			List<ActiveDirectoryUser> users = OU_USER_BASE.stream()
-			                                              .peek(g -> log.infov("fetching users from: {0}", g))
-			                                              .map(this::getUsersFromAd)
-			                                              .peek(g -> log.infov("found users: {0}", g.size()))
-			                                              .flatMap(Collection::stream)
-			                                              .toList();
+			List<ActiveDirectoryUser> users = OU_USER_BASES.stream()
+			                                               .peek(g -> log.infov("fetching users from: {0}", g))
+			                                               .map(this::getUsersFromAd)
+			                                               .peek(g -> log.infov("found users: {0}", g.size()))
+			                                               .flatMap(Collection::stream)
+			                                               .toList();
 
 			List<ActiveDirectoryUser> noId = users.stream()
 			                                      .filter(u -> u.getSamAccountName() == null)
@@ -104,7 +122,13 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		try
 		{
 			log.info("fetching groups from ad");
-			List<ActiveDirectoryGroup> groups = getGroupsFromAd(GROUP_BASE_DN);
+			List<ActiveDirectoryGroup> groups;
+			groups = OU_GROUP_BASES.stream()
+			                       .peek(g -> log.infov("fetching group: {0}", g))
+			                       .map(this::getGroupsFromAd)
+			                       .peek(g -> log.infov("found groups: {0}", g.size()))
+			                       .flatMap(Collection::stream)
+			                       .toList();
 			log.infov("fetched groups from ad: {0}", groups.size());
 
 			log.info("fetching users from db");
@@ -133,16 +157,15 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		{
 			log.error(e);
 			log.errorv("error: {0}", e.getMessage(), e);
-			e.printStackTrace();
 		}
 	}
 
 	private List<ActiveDirectoryUser> getUsersFromAd(String dn)
 	{
+
 		log.infov("getting users from ad: {0}", dn);
 
-		return ad.getUsers(dn, Set.of("distinguishedName", "cn", "whenChanged", "whenCreated", "sAMAccountName",
-		                              "displayName", "lastLogonTimestamp", "accountExpires", "pwdLastSet"))
+		return ad.getUsers(dn, LDAP_ATTRIBUTES_USER)
 		         .values()
 		         .stream()
 		         .map(this::makeActiveDirectoryUser)
@@ -151,7 +174,7 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 
 	private List<ActiveDirectoryGroup> getGroupsFromAd(String dn)
 	{
-		return ad.getGroups(dn, Set.of("sAMAccountName", "distinguishedName", "cn", "whenChanged", "whenCreated"))
+		return ad.getGroups(dn, LDAP_ATTRIBUTES_GROUP)
 		         .values()
 		         .parallelStream()
 		         .map(this::makeActiveDirectoryGroup)
@@ -209,9 +232,32 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 		user.setNormalisedDn(normalised_dn);
 		user.setCn(data.get("cn"));
 		user.setDisplayName(data.get("displayName"));
-		user.setLastLogon(ActiveDirectoryDAO.getDateFromTimestamp(data.get("lastLogonTimestamp")));
+		user.setLastLogonTimestamp(ActiveDirectoryDAO.getDateFromTimestamp(data.get("lastLogonTimestamp")));
 		user.setAccountExpires(ActiveDirectoryDAO.getDateFromTimestamp(data.get("accountExpires")));
 		user.setPasswordLastSet(ActiveDirectoryDAO.getDateFromTimestamp(data.get("pwdLastSet")));
+		user.setDescription(data.get("description"));
+		user.setUserPrincipalName(data.get("userPrincipalName"));
+		user.setMail(data.get("mail"));
+		user.setMailNickname(data.get("mailNickname"));
+		user.setDivision(data.get("division"));
+		user.setEmployeeType(data.get("employeeType"));
+		user.setFlags(data.get("flags"));
+		user.setExtensionAttribute01(data.get("extensionAttribute1"));
+		user.setExtensionAttribute02(data.get("extensionAttribute2"));
+		user.setExtensionAttribute03(data.get("extensionAttribute3"));
+		user.setExtensionAttribute04(data.get("extensionAttribute4"));
+		user.setExtensionAttribute05(data.get("extensionAttribute5"));
+		user.setExtensionAttribute06(data.get("extensionAttribute6"));
+		user.setExtensionAttribute07(data.get("extensionAttribute7"));
+		user.setExtensionAttribute08(data.get("extensionAttribute8"));
+		user.setExtensionAttribute09(data.get("extensionAttribute9"));
+		user.setExtensionAttribute10(data.get("extensionAttribute10"));
+		user.setExtensionAttribute11(data.get("extensionAttribute11"));
+		user.setExtensionAttribute12(data.get("extensionAttribute12"));
+		user.setExtensionAttribute13(data.get("extensionAttribute13"));
+		user.setExtensionAttribute14(data.get("extensionAttribute14"));
+		user.setExtensionAttribute15(data.get("extensionAttribute15"));
+		user.setExtensionAttribute16(data.get("extensionAttribute16"));
 
 		String whenCreated = data.get("whenCreated");
 		String whenChanged = data.get("whenChanged");
@@ -293,8 +339,9 @@ public class ActiveDirectoryHarvester implements QuarkusApplication
 			                     .forEach(m -> {
 				                     try
 				                     {
-					                     out.write(String.format("%s,%s\n", g.getSamAccountName(), m.getSamAccountName())
-					                                     .getBytes(StandardCharsets.UTF_8));
+					                     out.write(
+							                     String.format("%s,%s\n", g.getSamAccountName(), m.getSamAccountName())
+							                           .getBytes(StandardCharsets.UTF_8));
 				                     }
 				                     catch (IOException e)
 				                     {

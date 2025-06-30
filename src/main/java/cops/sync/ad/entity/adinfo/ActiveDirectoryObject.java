@@ -26,6 +26,9 @@ public abstract class ActiveDirectoryObject
 	@Column(name = "cn", length = 200)
 	String cn;
 
+	@Column(name = "description", length = 500)
+	String description;
+
 	@Column(name = "created")
 	Date created;
 
@@ -82,6 +85,16 @@ public abstract class ActiveDirectoryObject
 		this.cn = cn;
 	}
 
+	public String getDescription()
+	{
+		return description;
+	}
+
+	public void setDescription(String description)
+	{
+		this.description = description;
+	}
+
 	public Date getCreated()
 	{
 		return created;
@@ -105,24 +118,26 @@ public abstract class ActiveDirectoryObject
 	@Override
 	public boolean equals(Object o)
 	{
-		if (this == o)
-			return true;
-		if (!(o instanceof ActiveDirectoryObject that))
+		if (o == null || getClass() != o.getClass())
 			return false;
-		return Objects.equals(samAccountName, that.samAccountName);
+		ActiveDirectoryObject that = (ActiveDirectoryObject) o;
+		return Objects.equals(samAccountName, that.samAccountName) && Objects.equals(name, that.name) &&
+		       Objects.equals(dn, that.dn) && Objects.equals(normalisedDn, that.normalisedDn) &&
+		       Objects.equals(cn, that.cn) && Objects.equals(description, that.description) &&
+		       Objects.equals(created, that.created) && Objects.equals(updated, that.updated);
 	}
 
 	@Override
 	public int hashCode()
 	{
-		return Objects.hashCode(samAccountName);
+		return Objects.hash(samAccountName, name, dn, normalisedDn, cn, description, created, updated);
 	}
 
 	@Override
 	public String toString()
 	{
 		return "ActiveDirectoryObject{" + "samAccountName='" + samAccountName + '\'' + ", name='" + name + '\'' +
-		       ", dn='" + dn + '\'' + ", normalisedDn='" + normalisedDn + '\'' + ", cn='" + cn + '\'' + ", created=" +
-		       created + ", updated=" + updated + '}';
+		       ", dn='" + dn + '\'' + ", normalisedDn='" + normalisedDn + '\'' + ", cn='" + cn + '\'' +
+		       ", description='" + description + '\'' + ", created=" + created + ", updated=" + updated + '}';
 	}
 }

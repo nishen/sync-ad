@@ -24,8 +24,14 @@ public class ActiveDirectoryDAO
 
 	private static final String GROUP_FILTER = "(objectClass=Group)";
 
-	private static final Set<String> LDAP_TIMESTAMP_ATTRIBUTES =
-			Set.of("pwdlastset", "accountexpires", "lastlogon", "lastlogontimestamp", "badpasswordtime");
+	private static final Set<String> LDAP_ATTRIBUTES =
+			Set.of("samAccountName", "name", "distinguishedName", "cn", "description", "whenCreated", "whenChanged",
+			       "pwdLastSet", "accountExpires", "lastLogonTimestamp", "displayName", "userPrincipalName", "mail",
+			       "mailNickname", "division", "employeeType", "flags", "extensionAttribute1", "extensionAttribute2",
+			       "extensionAttribute3", "extensionAttribute4", "extensionAttribute5", "extensionAttribute6",
+			       "extensionAttribute7", "extensionAttribute8", "extensionAttribute9", "extensionAttribute10",
+			       "extensionAttribute11", "extensionAttribute12", "extensionAttribute13", "extensionAttribute14",
+			       "extensionAttribute15", "extensionAttribute16");
 
 	@ConfigProperty(name = "ldap.basedn.group")
 	private String groupBaseDn;
